@@ -1,0 +1,53 @@
+# shellcheck shell=bash
+# Plik startowy powłoki labu (bash --rcfile). Definiuje komendy pomocnicze.
+source "$LAB_DIR/lib-lab.sh"
+source "$LAB_DIR/scenarios.sh"
+HINT_N=0
+
+c() { ip netns exec client "$@"; }      # c ping 10.0.2.20
+r() { ip netns exec router "$@"; }      # r iptables -L -n -v
+s() { ip netns exec server "$@"; }      # s ss -tlnp
+enter() {                               # enter client|router|server — powłoka w danym hoście
+  [[ " ${NS[*]} " == *" $1 "* ]] || { echo "użycie: enter client|router|server"; return 1; }
+  ip netns exec "$1" env PS1="\[\e[1;35m\][lab:$1]\[\e[0m\] \w# " bash --norc
+}
+dnsq() { python3 "$LAB_DIR/tools/dnsq.py" "$@"; }
+app-restart() { start_app && echo "aplikacja :9000 uruchomiona ponownie"; }
+
+topo() { sed -n '/Topologia:/,/^# =====/p' "$LAB_DIR/lib-lab.sh" | sed '$d; s/^#//'; }
+story() {
+  printf '\n\e[1;36m  Scenariusz %s%s\e[0m\n' "$LAB_SC" "$([[ -z $LAB_RANDOM ]] && echo ": $(s${LAB_SC}_title)")"
+  "s${LAB_SC}_story" | sed 's/^/  /'; echo
+}
+check() {
+  if "s${LAB_SC}_check"; then
+    ok "NAPRAWIONE! Scenariusz $LAB_SC: $(s${LAB_SC}_title)"; echo "  Wpisz 'solution', żeby porównać ze wzorcowym rozwiązaniem, 'exit' żeby wyjść."
+  else
+    fail "Jeszcze nie działa. 'hint' = podpowiedź."
+  fi
+}
+hint() {
+  local -n H="S${LAB_SC}_HINTS"
+  if ((HINT_N < ${#H[@]})); then printf '\e[1;33m  podpowiedź %d/%d:\e[0m %s\n' $((HINT_N + 1)) ${#H[@]} "${H[$HINT_N]}"; ((HINT_N++))
+  else echo "  Koniec podpowiedzi. 'solution' pokaże rozwiązanie."; fi
+}
+solution() { printf '\e[1;36m  Rozwiązanie — %s\e[0m\n' "$(s${LAB_SC}_title)"; "s${LAB_SC}_solution" | sed 's/^/  /'; }
+help() { cat <<'EOF'
+  Komendy labu:
+    story            objawy zgłoszenia          topo        schemat sieci
+    (jesteś na hoście CLIENT — gołe komendy jak ping/curl/ss idą stąd)
+    c|r|s KOMENDA    uruchom na client/router/server, np.  r iptables -L -n -v
+    enter HOST       powłoka wewnątrz hosta (exit = powrót)
+    check            czy już naprawione?         hint        kolejna podpowiedź
+    solution         rozwiązanie                 dnsq NAZWA [SERWER]   zapytanie DNS (jak dig)
+    app-restart      restart aplikacji :9000     exit        koniec labu (wszystko znika)
+  Narzędzia z lekcji działają normalnie: ip, ss, iptables, tc, ping, curl, nstat, tracepath, tcpdump...
+EOF
+}
+
+PS1='\[\e[1;35m\][lab#$LAB_SC client]\[\e[0m\] \w$ '
+cd "$LAB" || true
+clear 2>/dev/null
+topo
+story
+help

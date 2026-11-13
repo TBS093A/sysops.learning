@@ -1,0 +1,19 @@
+#!/usr/bin/env bpftrace
+// opensnoop — kto otwiera jakie pliki i z jakim wynikiem (jak strace -e openat,
+// ale dla CAŁEGO systemu i prawie bez narzutu). Ujemny FD = błąd (-2 ENOENT, -13 EACCES).
+// Uruchom: sudo bpftrace bpf/opensnoop.bt
+BEGIN { printf("%-7s %-16s %4s %s\n", "PID", "COMM", "FD", "PLIK"); }
+
+tracepoint:syscalls:sys_enter_openat
+{
+  @path[tid] = args.filename;
+}
+
+tracepoint:syscalls:sys_exit_openat
+/@path[tid]/
+{
+  printf("%-7d %-16s %4d %s\n", pid, comm, args.ret, str(@path[tid]));
+  delete(@path[tid]);
+}
+
+END { clear(@path); }

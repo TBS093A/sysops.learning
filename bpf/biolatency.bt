@@ -1,0 +1,18 @@
+#!/usr/bin/env bpftrace
+// biolatency — histogram czasu obsługi żądań I/O dysku (od wysłania do urządzenia
+// do zakończenia). iostat podaje ŚREDNIĄ (await) — histogram pokazuje ogon:
+// 99% żądań w 0,1 ms i 1% po 500 ms to zupełnie inna sytuacja niż równe 5 ms.
+// Uruchom: sudo bpftrace bpf/biolatency.bt   (Ctrl+C = pokaż histogram)
+tracepoint:block:block_rq_issue
+{
+  @start[args.dev, args.sector] = nsecs;
+}
+
+tracepoint:block:block_rq_complete
+/@start[args.dev, args.sector]/
+{
+  @usecs = hist((nsecs - @start[args.dev, args.sector]) / 1000);
+  delete(@start[args.dev, args.sector]);
+}
+
+END { clear(@start); }

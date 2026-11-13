@@ -24,6 +24,8 @@
 #    NOCOLOR=1          – bez kolorów (np. do `| less -R` niepotrzebne, do pliku tak)
 #    ANNOTATE_ALL=1     – wyjaśnienie pod KAŻDĄ pasującą linią, nie tylko pierwszą
 #    ANNOTATE_UNSEEN=0  – nie pokazuj wyjaśnień dla wzorców, których nie było
+#    QUIZ=1             – tryb powtórki: przy każdej objaśnianej linii najpierw pytanie,
+#                         wyjaśnienie dopiero po Enterze (możesz wpisać swoją odpowiedź)
 #    MAXLINES=40        – ile linii outputu pokazywać
 #    MAXWIDTH=150       – przycinaj dłuższe linie
 # =============================================================================
@@ -114,8 +116,17 @@ need_sudo() {
 #   * "||" w opisie = złamanie linii.
 # -----------------------------------------------------------------------------
 annotate() {
-  awk -v C="$C_EXPL" -v D="$C_DIM" -v R="$C_RESET" \
+  # QUIZ=1: przed wyjaśnieniem pytanie i czekanie na Enter (czytane z /dev/tty, bo stdin to potok)
+  local quiz=""
+  [[ -n "${QUIZ:-}" ]] && { : < /dev/tty; } 2>/dev/null && quiz=1
+  awk -v C="$C_EXPL" -v D="$C_DIM" -v R="$C_RESET" -v Q="$C_FLAG" -v QUIZ="$quiz" \
       -v ALL="${ANNOTATE_ALL:-}" -v UNSEEN="${ANNOTATE_UNSEEN:-1}" '
+    function ask(   ans) {
+      printf "%s      ❓ Co oznacza ta linia? Pomyśl, potem Enter…%s ", Q, R; fflush()
+      getline ans < "/dev/tty"
+      if (ans != "") printf "%s      (Twoja odpowiedź: %s)%s\n", D, ans, R
+      quizzed++
+    }
     function explain(i, color, mark,   m, j, parts) {
       m = split(ex[i], parts, "\\|\\|")
       for (j = 1; j <= m; j++)
@@ -129,11 +140,16 @@ annotate() {
       print
       # linie samego skryptu ("$ komenda", "  ! uwaga", "  » notka") nie są outputem — pomijamy
       if ($0 ~ /^(\033\[[0-9;]*m)?(\$ |  [!»] )/) next
+      asked = 0
       for (i = 1; i <= n; i++)
-        if ((ALL || !seen[i]) && $0 ~ re[i]) { seen[i] = 1; explain(i, C, "└─▶") }
+        if ((ALL || !seen[i]) && $0 ~ re[i]) {
+          seen[i] = 1
+          if (QUIZ && !asked++) ask()
+          explain(i, C, "└─▶")
+        }
     }
     END {
-      if (UNSEEN != "1") exit
+      if (UNSEEN != "1" || QUIZ) exit
       for (i = 1; i <= n; i++) if (!seen[i]) { if (!hdr++) printf "%s  ┄┄ nie wystąpiło teraz w Twoim outpucie (ale warto wiedzieć):%s\n", D, R
         printf "%s      ○ /%s/%s\n", D, re[i], R; explain(i, D, "  ") }
     }' "$@"

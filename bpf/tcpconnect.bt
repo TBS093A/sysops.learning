@@ -1,0 +1,20 @@
+#!/usr/bin/env bpftrace
+// tcpconnect + tcpretrans — wychodzące połączenia TCP i retransmisje, na żywo.
+// Używa stabilnych tracepointów (nie kprobe), więc działa na różnych kernelach.
+// Uruchom: sudo bpftrace bpf/tcpconnect.bt
+BEGIN { printf("%-10s %-16s %-7s %s\n", "ZDARZENIE", "COMM", "PID", "CEL"); }
+
+// zmiana stanu gniazda na SYN_SENT (2) = właśnie wysłaliśmy SYN (connect())
+tracepoint:sock:inet_sock_set_state
+/args.newstate == 2 && args.family == 2/
+{
+  printf("%-10s %-16s %-7d %s:%d\n", "CONNECT", comm, pid, ntop(args.daddr), args.dport);
+}
+
+// segment wysłany ponownie — straty na ścieżce, przeciążony odbiorca, zły MTU
+tracepoint:tcp:tcp_retransmit_skb
+/args.family == 2/
+{
+  printf("%-10s %-16s %-7s %s:%d -> %s:%d\n", "RETRANS", "-", "-",
+         ntop(args.saddr), args.sport, ntop(args.daddr), args.dport);
+}

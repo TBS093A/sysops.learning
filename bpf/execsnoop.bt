@@ -1,0 +1,11 @@
+#!/usr/bin/env bpftrace
+// execsnoop — każdy uruchomiony program (execve) w całym systemie.
+// Łapie krótko żyjące procesy, których nigdy nie zobaczysz w top/ps
+// (np. skrypt cron odpalający co sekundę 50 procesów -> "niewidzialne" CPU).
+// Uruchom: sudo bpftrace bpf/execsnoop.bt
+BEGIN { printf("%-8s %-7s %-7s %-16s %s\n", "TIME(ms)", "PID", "PPID", "RODZIC", "PROGRAM"); }
+
+tracepoint:syscalls:sys_enter_execve
+{
+  printf("%-8d %-7d %-7d %-16s %s\n", elapsed / 1000000, pid, curtask->real_parent->tgid, comm, str(args.filename));
+}

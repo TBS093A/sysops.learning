@@ -31,6 +31,49 @@ W skryptach nie ma spreparowanych outputów. Jeśli jakiś wzorzec nie wystąpi�
 | 12 | `12-strace-lsof.sh` | `strace -c`, jakie pliki czyta program, ENOENT, connect/DNS, wolne syscalle `-T`, `lsof` |
 | 13 | `13-kernel-dmesg-psi.sh` | `dmesg` (co oznaczają typowe błędy), PSI `/proc/pressure`, przerwania, softirq, `softnet_stat`, moduły, limity, cgroups v2 i throttling |
 | 14 | `14-sed-awk-wyluskiwanie.sh` | grep -o/-P, sed (grupy, zakresy), awk (pola, tablice, END, dwa pliki), dekodowanie `/proc/net/tcp` w awk, regexy |
+| 15 | `15-ebpf-perf-ftrace.sh` | ftrace (tracefs, bez instalacji), bpftrace: execsnoop / opensnoop / tcpconnect+retrans / biolatency / syscount ([`bpf/*.bt`](bpf/)), `perf stat` / `perf record`, bcc tools |
+| 16 | `16-tc-netem.sh` | **bez roota**, we własnych namespace'ach: opóźnienie, jitter, straty 5%, limit pasma (tbf) i bufferbloat. Po każdej zmianie pomiar przez `ping`, `curl -w`, `ss -ti`, `nstat`, `tc -s` |
+
+## Health-check (metoda USE)
+
+```bash
+./health-check.sh        # pełny przegląd
+./health-check.sh -q     # tylko problemy
+sudo ./health-check.sh   # + dmesg, usługi runit
+```
+
+Dla każdego zasobu (CPU, pamięć, dyski, sieć, conntrack, FD, procesy, zegar, usługi) sprawdza **U**tilization, **S**aturation i **E**rrors. Wartości chwilowe mierzy w oknie 1 s. Przy każdym problemie mówi, co sprawdzić dalej i w której lekcji jest o tym mowa. Kod wyjścia to liczba stanów „ŹLE”, więc skrypt nadaje się do crona.
+
+## Lab „break-fix”
+
+```bash
+./lab/lab.sh             # lista scenariuszy
+./lab/lab.sh 4           # konkretny scenariusz
+./lab/lab.sh random      # losowy, bez tytułu: jak prawdziwy dyżur
+./lab/lab.sh selftest    # automatycznie: zepsuj, sprawdź, napraw, sprawdź (dla każdego scenariusza)
+```
+
+Lab buduje wirtualną sieć `client ─ router ─ server` (veth, routing, dnsmasq, serwery HTTP) w nowych przestrzeniach nazw: `unshare --user --net --mount --pid`. **Nie wymaga roota i nie dotyka Twojej sieci, firewalla ani `/etc`.** Po wyjściu z powłoki labu wszystko znika. Lab psuje jedną rzecz, a Ty dostajesz zgłoszenie „od użytkownika” i powłokę na hoście `client`:
+
+| # | Scenariusz |
+|---|-----------|
+| 1 | router nie przekazuje pakietów |
+| 2 | timeout czy *connection refused*? (DROP vs REJECT na różnych hostach) |
+| 3 | brak trasy powrotnej |
+| 4 | MTU blackhole: małe odpowiedzi przechodzą, duże wiszą |
+| 5 | pełna kolejka accept (backlog / somaxconn) |
+| 6 | DNS mówi jedno, aplikacja robi drugie |
+| 7 | wolna i stratna sieć (zapomniany `tc netem`) |
+
+Komendy w powłoce labu: `story`, `topo`, `c|r|s KOMENDA` (wykonaj na client/router/server), `enter HOST`, `check`, `hint` (podpowiedzi stopniowane), `solution`, `dnsq`, `app-restart`, `exit`. Wymagane pakiety: iproute2, iptables, python3, dnsmasq, curl. Kernel musi pozwalać na nieuprzywilejowane user namespaces (domyślnie tak jest prawie wszędzie).
+
+## Tryb quizu
+
+```bash
+QUIZ=1 ./05-gniazda-ss.sh
+```
+
+Przy każdej objaśnianej linii najpierw pada pytanie „co oznacza ta linia?”. Możesz wpisać swoją odpowiedź, a wyjaśnienie pokazuje się dopiero po Enterze. Działa w każdej lekcji, także w 16.
 
 ## Uruchamianie
 
@@ -51,6 +94,7 @@ Lekcje, które czytają rzeczy dostępne tylko dla roota (iptables, nft, conntra
 | `ANNOTATE_UNSEEN=0` | ukryj wyjaśnienia wzorców, których nie było w outpucie |
 | `MAXLINES=40` / `MAXWIDTH=150` | przycinanie długiego outputu |
 | `TARGET=host` | cel testów sieciowych w lekcjach 08 i 10 |
+| `QUIZ=1` | tryb powtórki: najpierw pytanie, wyjaśnienie po Enterze |
 
 Raport ze wszystkich lekcji do pliku:
 

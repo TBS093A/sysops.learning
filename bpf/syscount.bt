@@ -1,0 +1,20 @@
+#!/usr/bin/env bpftrace
+// syscount + profil CPU — kto robi najwięcej syscalli i kto najczęściej jest na CPU
+// (próbkowanie 99 razy/s na każdym CPU). Lżejsza alternatywa dla perf top.
+// Uruchom: sudo bpftrace bpf/syscount.bt   (Ctrl+C = podsumowanie)
+tracepoint:raw_syscalls:sys_enter
+{
+  @syscalls[comm] = count();
+}
+
+profile:hz:99
+{
+  @oncpu[comm] = count();
+}
+
+END
+{
+  printf("\n== TOP syscalle wg procesu ==\n");   print(@syscalls, 8);
+  printf("\n== TOP próbki on-CPU wg procesu ==\n"); print(@oncpu, 8);
+  clear(@syscalls); clear(@oncpu);
+}
